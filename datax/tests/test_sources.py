@@ -113,3 +113,28 @@ def test_download_rejects_zip_that_is_not_a_document(tmp_path, monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: FakeResponse(payload))
     with pytest.raises(DownloadError, match="not a usable .docx"):
         download_docx("https://example.com/doc.docx", tmp_path)
+
+
+# -- ETag integrity --------------------------------------------------------
+
+
+def test_etag_verification_accepts_a_matching_md5():
+    from datax.sources.web import _verify_etag
+
+    assert _verify_etag('"d41d8cd98f00b204e9800998ecf8427e"', "d41d8cd98f00b204e9800998ecf8427e")
+
+
+def test_etag_verification_rejects_a_mismatch():
+    from datax.sources.web import _verify_etag
+
+    assert _verify_etag('"d41d8cd98f00b204e9800998ecf8427e"', "0" * 32) is False
+
+
+def test_etag_verification_skips_uncomparable_tags():
+    """A weak or multipart ETag is not an MD5 and must not read as a failure."""
+    from datax.sources.web import _verify_etag
+
+    assert _verify_etag("", "0" * 32) is None
+    assert _verify_etag('W/"abc"', "0" * 32) is None
+    assert _verify_etag('"d41d8cd98f00b204e9800998ecf8427e-3"', "0" * 32) is None
+    assert _verify_etag('"not-a-hash"', "0" * 32) is None

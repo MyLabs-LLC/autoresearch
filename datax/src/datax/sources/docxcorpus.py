@@ -1,10 +1,10 @@
 """Real-world .docx documents, sourced via the superdoc-dev/docx-corpus index.
 
-That dataset is a 736K-row index of publicly reachable .docx URLs, each pre-classified
-by document type and topic. Its topic vocabulary happens to include exactly the three
-industries this dataset targets -- ``healthcare`` (64.5K), ``finance`` (49.2K) and
-``government`` (244.9K) -- which makes it a usable discovery layer: filter the index,
-then download the real documents from the URLs it records.
+That dataset is a 736K-row index of .docx files, each pre-classified by document type
+and topic. Its topic vocabulary happens to include exactly the three industries this
+dataset targets -- ``healthcare`` (64.5K), ``finance`` (49.2K) and ``government``
+(244.9K) -- which makes it a usable discovery layer: filter the index, then download
+the documents from the URLs it records.
 
 Why this rather than a hardcoded list of agency URLs: guessed .gov paths rot
 immediately and many agencies block non-browser clients outright. An index that is
@@ -13,6 +13,30 @@ itself versioned and downloadable is reproducible; a handwritten URL list is not
 The corpus topic is treated as a **sampling filter, not a label**. Documents still go
 through the judge like everything else, and the index's own topic is retained only as
 a weak reference on the record so the two can be compared.
+
+Three properties of this source are worth knowing before relying on it:
+
+**Everything comes from one host.** All 736,706 rows point at
+``docxcorp.us/documents/<id>.docx`` -- Cloudflare R2 storage operated by SuperDoc, who
+also publish the index. The documents were harvested from the public web, but the
+index preserves **no original-source URL**: ``url`` is the mirror address and
+``filename`` is usually unusable for tracing (``content``, ``index.php``, ``13462``).
+Provenance to the originating site is therefore not recoverable, and
+``source.reference`` on a record names the mirror.
+
+**The ``id`` is not the hash of the file you receive.** The corpus documents it as
+"content-addressed by SHA-256", but measured over a sample of 24 downloads, only 1
+had ``sha256(bytes) == id``. The delivery is sound -- fetches are byte-identical
+across attempts and the MD5 matches the server's ETag every time -- and the content is
+authentic (our extraction of a served file overlaps the corpus' own extracted text on
+74 of 75 distinct words). The ``id`` simply hashes some earlier artifact, so it is a
+stable join key to the index metadata and **not** an integrity check. Verification is
+done against the ETag instead; see :func:`datax.sources.web._verify_etag`.
+
+**Their extracted text is not used.** ``docxcorp.us/extracted/<id>.txt`` offers
+pre-extracted plain text, but datax parses the .docx itself: span offsets must index
+the same string the manifest ships, and their extractor emits different spacing and
+``<!-- image -->`` markers. Adopting it would invalidate every offset.
 """
 
 from __future__ import annotations

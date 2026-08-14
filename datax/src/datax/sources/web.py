@@ -40,6 +40,30 @@ class Download:
     path: Path
     sha256: str
     size_bytes: int
+    etag_verified: bool = False
+    """True when the server sent a plain-MD5 ETag and the downloaded bytes matched it.
+
+    This detects truncation and transit corruption. It is **not** proof of
+    authenticity: the same server supplies both the bytes and the ETag.
+    """
+
+
+def _verify_etag(etag: str, md5_hex: str) -> bool | None:
+    """Compare a downloaded body against the server's ETag.
+
+    S3-compatible stores (Cloudflare R2 included) set the ETag to the object's MD5 for
+    single-part uploads, which makes it a free corruption check. Returns ``True`` on a
+    match, ``False`` on a mismatch, and ``None`` when the ETag is absent or is not a
+    plain MD5 -- a weak ETag (``W/"..."``) or a multipart ETag (``"<hex>-<n>"``) is not
+    comparable and must not be treated as a failure.
+    """
+    tag = etag.strip()
+    if not tag or tag.startswith("W/"):
+        return None
+    tag = tag.strip('"')
+    if len(tag) != 32 or not all(c in "0123456789abcdefABCDEF" for c in tag):
+        return None
+    return tag.lower() == md5_hex.lower()
 
 
 def _check_url(url: str) -> None:
@@ -72,9 +96,12 @@ def download_docx(
 
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     digest = hashlib.sha256()
+    md5 = hashlib.md5()  # noqa: S324 - integrity check against the server's ETag, not security
     total = 0
+    etag = ""
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response, tmp.open("wb") as fh:
+            etag = response.headers.get("ETag", "")
             first = response.read(4)
             if first != ZIP_MAGIC:
                 raise DownloadError(
@@ -84,16 +111,26 @@ def download_docx(
                 )
             fh.write(first)
             digest.update(first)
+            md5.update(first)
             total = 4
             while chunk := response.read(1 << 16):
                 total += len(chunk)
                 if total > max_bytes:
                     raise DownloadError(f"exceeds size cap of {max_bytes} bytes")
                 digest.update(chunk)
+                md5.update(chunk)
                 fh.write(chunk)
     except (urllib.error.URLError, OSError, DownloadError) as exc:
         tmp.unlink(missing_ok=True)
         raise DownloadError(str(exc)) from None
+
+    etag_verified = _verify_etag(etag, md5.hexdigest())
+    if etag_verified is False:
+        tmp.unlink(missing_ok=True)
+        raise DownloadError(
+            f"content does not match the server's ETag ({etag}); "
+            "the download was truncated or corrupted"
+        )
 
     tmp.replace(target)
 
@@ -104,7 +141,13 @@ def download_docx(
         target.unlink(missing_ok=True)
         raise DownloadError(f"downloaded file is not a usable .docx: {exc}") from None
 
-    return Download(url=url, path=target, sha256=digest.hexdigest(), size_bytes=total)
+    return Download(
+        url=url,
+        path=target,
+        sha256=digest.hexdigest(),
+        size_bytes=total,
+        etag_verified=bool(etag_verified),
+    )
 
 
 def fetch(

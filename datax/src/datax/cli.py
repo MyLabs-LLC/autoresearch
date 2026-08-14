@@ -3,6 +3,7 @@
     python -m datax taxonomy                 inspect and validate the taxonomies
     python -m datax fetch nemotron           render gold-labelled .docx from Nemotron-PII
     python -m datax fetch corpus             download real .docx via the docx-corpus index
+    python -m datax bulk                     bulk-download the corpus into topic/type folders
     python -m datax judge <dir>              classify .docx files into a manifest
     python -m datax validate <manifest>      check a manifest for internal consistency
     python -m datax stats <manifest>         dataset statistics and coverage gaps
@@ -321,6 +322,104 @@ def cmd_judge(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+def cmd_bulk(args: argparse.Namespace) -> int:
+    from .sources import bulk, docxcorpus
+
+    out_dir = Path(args.out)
+    index_path = docxcorpus.download_index(args.cache_dir)
+
+    topics = bulk.ALL_TOPICS if args.topics == "all" else [t.strip() for t in args.topics.split(",")]
+    types = [t.strip() for t in args.types.split(",")] if args.types else None
+
+    if args.retry_failed:
+        urls = set(bulk.load_failures(out_dir))
+        if not urls:
+            print(f"no failures recorded in {out_dir / bulk.FAILURES_FILE}", file=sys.stderr)
+            return 1
+        entries = [
+            e
+            for e in bulk.select_all(
+                index_path, topics=topics, language=None, min_confidence=0.0
+            )
+            if e.url in urls
+        ]
+        print(f"retrying {len(entries):,} previously failed download(s)")
+    else:
+        entries = bulk.select_all(
+            index_path,
+            topics=topics,
+            language=args.lang or None,
+            types=types,
+            min_confidence=args.min_confidence,
+            min_words=args.min_words,
+            limit=args.limit or None,
+        )
+
+    if not entries:
+        print("no index rows matched those filters", file=sys.stderr)
+        return 1
+
+    grid = bulk.summarise_plan(entries)
+    print(f"{len(entries):,} document(s) selected -> {out_dir}/<topic>/<type>/<id>.docx\n")
+    print(f"{'topic':<14}{'type':<18}{'count':>10}")
+    print("-" * 42)
+    for topic in sorted(grid):
+        for doc_type, count in sorted(grid[topic].items(), key=lambda kv: -kv[1]):
+            print(f"{topic:<14}{doc_type:<18}{count:>10,}")
+        print(f"{topic:<14}{'(all types)':<18}{sum(grid[topic].values()):>10,}")
+        print()
+
+    estimated = bulk.estimate_bytes(entries) if not args.no_estimate else 0
+    free = bulk.free_bytes(out_dir)
+    if estimated:
+        print(f"estimated download size: {estimated / 1e9:.1f} GB (sampled from live HEAD requests)")
+    print(f"free disk at destination: {free / 1e9:.1f} GB")
+    if estimated and estimated > free * 0.9:
+        print(
+            f"\nrefusing to start: {estimated / 1e9:.1f} GB needed but only "
+            f"{free / 1e9:.1f} GB free. Narrow the selection or point --out at a "
+            "bigger volume.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.plan:
+        print("\n--plan given; nothing downloaded.")
+        return 0
+
+    hours = len(entries) / max(args.workers, 1) * 0.35 / 3600
+    print(f"\nstarting with {args.workers} workers (rough estimate: {hours:.1f} h)")
+    print("safe to interrupt and re-run -- existing files are skipped.\n")
+
+    def progress(report: bulk.BulkReport) -> None:
+        done = report.downloaded + report.skipped_existing + report.failed
+        pct = done / report.requested * 100 if report.requested else 0
+        rate = report.downloaded / report.elapsed_seconds if report.elapsed_seconds else 0
+        remaining = (report.requested - done) / rate / 60 if rate else 0
+        print(
+            f"  {done:>7,}/{report.requested:,} ({pct:5.1f}%)  "
+            f"{report.bytes_written / 1e9:5.2f} GB  {rate:5.1f} files/s  "
+            f"~{remaining:.0f} min left  ({report.failed} failed)"
+        )
+
+    report = bulk.download_all(
+        entries,
+        out_dir,
+        workers=args.workers,
+        retries=args.retries,
+        timeout=args.timeout,
+        verify_existing=args.verify_existing,
+        on_progress=progress,
+        progress_every=args.progress_every,
+    )
+    print()
+    print(report.summary())
+    print(f"\nindex:    {out_dir / bulk.INDEX_FILE}")
+    if report.failed:
+        print(f"failures: {out_dir / bulk.FAILURES_FILE}  (re-run with --retry-failed)")
+    return 0
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     taxonomy = default_taxonomy()
     report = validate_manifest(args.manifest, taxonomy)
@@ -431,6 +530,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="gold manifest, read only to recover source attribution by content hash",
     )
     p_judge.set_defaults(func=cmd_judge)
+
+    p_bulk = sub.add_parser(
+        "bulk", help="bulk-download the docx-corpus into a <topic>/<type>/<id>.docx tree"
+    )
+    p_bulk.add_argument("--out", default="datax/data/corpus", help="destination root")
+    p_bulk.add_argument(
+        "--topics",
+        default="government,finance,healthcare",
+        help="comma-separated corpus topics, or 'all' for every topic",
+    )
+    p_bulk.add_argument("--lang", default="en", help="ISO 639-1 language, empty for all")
+    p_bulk.add_argument("--types", default="", help="comma-separated document types (default: all)")
+    p_bulk.add_argument("--min-confidence", type=float, default=0.0)
+    p_bulk.add_argument("--min-words", type=int, default=0)
+    p_bulk.add_argument("--limit", type=int, default=0)
+    p_bulk.add_argument(
+        "--workers", type=int, default=8, help="parallel downloads (the corpus suggests 4)"
+    )
+    p_bulk.add_argument("--retries", type=int, default=3)
+    p_bulk.add_argument("--timeout", type=int, default=30)
+    p_bulk.add_argument("--progress-every", type=int, default=250)
+    p_bulk.add_argument(
+        "--verify-existing",
+        action="store_true",
+        help="re-open already-downloaded files to confirm they are valid .docx",
+    )
+    p_bulk.add_argument("--retry-failed", action="store_true", help="re-attempt failures.jsonl")
+    p_bulk.add_argument("--plan", action="store_true", help="show the plan and exit")
+    p_bulk.add_argument("--no-estimate", action="store_true", help="skip the HEAD size sample")
+    p_bulk.add_argument("--cache-dir", default="datax/data/cache")
+    p_bulk.set_defaults(func=cmd_bulk)
 
     p_val = sub.add_parser("validate", help="check a manifest for internal consistency")
     p_val.add_argument("manifest", nargs="?", default=DEFAULT_MANIFEST)

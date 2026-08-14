@@ -222,6 +222,47 @@ python -m datax stats --out data/stats.json    # distribution + coverage gaps
 python -m datax evaluate                       # judge vs gold: accuracy, P/R/F1
 ```
 
+### Bulk-mirroring the corpus
+
+`bulk` downloads the corpus into a plain `<topic>/<type>/<id>.docx` tree — usable by
+folder-based loaders and by `find`, and separate from the judged pipeline above.
+
+```bash
+python -m datax bulk --plan                    # counts + disk estimate, downloads nothing
+python -m datax bulk --out /data/corpus        # all English gov/finance/health (~94.7K)
+python -m datax bulk --out /data/corpus --topics all --lang ''   # everything (736.7K)
+python -m datax bulk --out /data/corpus --retry-failed           # re-attempt failures
+```
+
+```
+/data/corpus/
+├── government/legal/<sha256>.docx
+├── healthcare/forms/<sha256>.docx
+├── index.jsonl        one row per file: topic, type, language, confidence, word_count, url, path
+└── failures.jsonl     one row per failed URL, feed back with --retry-failed
+```
+
+Built for a job that runs for hours over tens of thousands of files:
+
+- **Resumable** — files already present are skipped, so an interrupted run costs
+  nothing to restart. `--verify-existing` re-opens them and re-fetches any that are
+  corrupt (a run killed mid-write leaves truncated files).
+- **Retries transient failures only** — timeouts, connection resets, 429s and 5xx back
+  off exponentially; a URL that serves HTML will never become a `.docx`, so it is
+  recorded once and not retried.
+- **Every failure is written down.** Over ~95K requests some will fail.
+- **Metadata travels with the files.** The tree encodes topic and type; `index.jsonl`
+  keeps language, confidence, word count and the source URL, which the folder names
+  cannot carry.
+- **Refuses to start** if the estimated size exceeds free disk. The estimate comes
+  from live HEAD requests over a sample, because `.docx` size correlates badly with
+  word count (images dominate).
+
+Default concurrency is 8; the corpus' own documentation suggests 4. It is someone
+else's storage bill — don't raise it much.
+
+### Judging
+
 `judge` defaults to the Claude Code backend. For the API instead:
 
 ```bash

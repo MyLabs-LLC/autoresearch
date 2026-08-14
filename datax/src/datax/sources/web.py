@@ -31,7 +31,20 @@ ALLOWED_SCHEMES = {"http", "https"}
 
 
 class DownloadError(RuntimeError):
-    pass
+    """A download failed.
+
+    ``transient`` marks failures worth retrying -- timeouts, connection resets, 429s
+    and 5xx. A file that simply is not a Word document will never become one, so
+    retrying it just wastes requests against the host.
+    """
+
+    def __init__(self, message: str, *, transient: bool = False):
+        super().__init__(message)
+        self.transient = transient
+
+
+# HTTP statuses where retrying is reasonable.
+RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
 
 
 @dataclass
@@ -120,16 +133,29 @@ def download_docx(
                 digest.update(chunk)
                 md5.update(chunk)
                 fh.write(chunk)
-    except (urllib.error.URLError, OSError, DownloadError) as exc:
+    except urllib.error.HTTPError as exc:
         tmp.unlink(missing_ok=True)
-        raise DownloadError(str(exc)) from None
+        raise DownloadError(
+            f"HTTP {exc.code}", transient=exc.code in RETRYABLE_STATUS
+        ) from None
+    except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+        # Network-level failure: worth another attempt.
+        tmp.unlink(missing_ok=True)
+        raise DownloadError(str(exc), transient=True) from None
+    except DownloadError:
+        tmp.unlink(missing_ok=True)
+        raise
+    except OSError as exc:
+        tmp.unlink(missing_ok=True)
+        raise DownloadError(str(exc), transient=True) from None
 
     etag_verified = _verify_etag(etag, md5.hexdigest())
     if etag_verified is False:
         tmp.unlink(missing_ok=True)
         raise DownloadError(
             f"content does not match the server's ETag ({etag}); "
-            "the download was truncated or corrupted"
+            "the download was truncated or corrupted",
+            transient=True,
         )
 
     tmp.replace(target)

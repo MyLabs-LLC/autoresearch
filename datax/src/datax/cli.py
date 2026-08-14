@@ -136,8 +136,34 @@ def _load_provenance(cache_dir: str) -> dict[str, dict]:
         return {}
 
 
-def _source_for(path: Path, provenance: dict[str, dict]) -> SourceInfo:
-    entry = provenance.get(str(path))
+def _load_gold_provenance(gold_path: str) -> dict[str, SourceInfo]:
+    """Recover source attribution for documents that already have gold records.
+
+    The gold manifest records where each rendered document came from, keyed by content
+    hash. Reusing it here keeps judged records attributed to ``nemotron`` (and marked
+    synthetic) instead of falling back to ``local``, which would misreport the corpus
+    as containing real personal data.
+    """
+    path = Path(gold_path)
+    if not path.exists():
+        return {}
+    try:
+        return {r.file.sha256: r.source for r in read_manifest(path)}
+    except Exception:  # noqa: BLE001 - provenance is best effort
+        return {}
+
+
+def _source_for(
+    path: Path,
+    sha256: str,
+    corpus_provenance: dict[str, dict],
+    gold_provenance: dict[str, SourceInfo],
+) -> SourceInfo:
+    known = gold_provenance.get(sha256)
+    if known is not None:
+        return known
+
+    entry = corpus_provenance.get(str(path))
     if entry:
         from .sources.docxcorpus import DATASET, LICENSE
 
@@ -186,6 +212,7 @@ def cmd_judge(args: argparse.Namespace) -> int:
         already = {r.file.sha256 for r in read_manifest(manifest_path)}
 
     provenance = _load_provenance(args.cache_dir)
+    gold_provenance = _load_gold_provenance(args.gold)
     pending = []
     for path in paths:
         if not looks_like_docx(path):
@@ -234,7 +261,7 @@ def cmd_judge(args: argparse.Namespace) -> int:
             BatchItem(
                 custom_id=f"doc-{index}",
                 extracted=extracted,
-                source=_source_for(path, provenance),
+                source=_source_for(path, extracted.sha256, provenance, gold_provenance),
             )
             for index, (path, extracted) in enumerate(pending)
         ]
@@ -258,7 +285,7 @@ def cmd_judge(args: argparse.Namespace) -> int:
             records.append(outcome.record)
     else:
         for index, (path, extracted) in enumerate(pending, start=1):
-            source = _source_for(path, provenance)
+            source = _source_for(path, extracted.sha256, provenance, gold_provenance)
             outcome = judge_document(
                 backend, extracted, source, taxonomy=taxonomy, config=config
             )
@@ -398,6 +425,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_judge.add_argument("--overwrite", action="store_true", help="replace the manifest")
     p_judge.add_argument("--dry-run", action="store_true", help="list work without calling the API")
     p_judge.add_argument("--cache-dir", default="datax/data/cache")
+    p_judge.add_argument(
+        "--gold",
+        default=DEFAULT_GOLD,
+        help="gold manifest, read only to recover source attribution by content hash",
+    )
     p_judge.set_defaults(func=cmd_judge)
 
     p_val = sub.add_parser("validate", help="check a manifest for internal consistency")

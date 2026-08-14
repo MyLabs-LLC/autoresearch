@@ -293,26 +293,56 @@ next batch of documents needs to contain.
 
 ## Status of this build
 
-Verified end to end in a clean container, except the live API call (no credentials
-were available there, so the judge was exercised through a stubbed client):
+Run end to end in a clean container, including live judging of all 84 documents
+through the `claude-code` backend.
 
 | Step | Result |
 |---|---|
 | `fetch nemotron --per-group 20` | 60/60 documents written, 0 failures |
 | `.docx` round trip | **byte-exact for all 60** documents |
 | gold spans preserved | **447/447 (100%)**, 4 repaired and noted |
-| `validate` | 60/60 records valid |
 | `fetch corpus --per-group 8` | 24/24 real documents downloaded, 0 failures |
-| `evaluate` (gold vs gold) | 100% across every metric — evaluator sanity check |
-| `pytest` | 102 passed |
+| `judge` (84 documents, claude-code) | 84/84 classified, 0 failures, **$3.09** ($0.037/doc) |
+| `validate` | 84/84 records valid |
+| `pytest` | 113 passed |
 
-The judge's outgoing request was checked offline: `claude-opus-5`, structured outputs
-with a 163-value path enum and a 55-value label enum, a ~6.4K-token cached system
-prefix (well above the 512-token minimum), and no `temperature`/`top_p`/`top_k` — all
-of which that model rejects.
+### Measured judge quality (60 gold documents)
 
-To run the judge for real you need credentials (`ANTHROPIC_API_KEY`, or `ant auth
-login`). Start with `python -m datax judge --dry-run` to see the workload for free.
+```
+industry accuracy       96.7%  (58/60)
+subcategory accuracy    90.0%  (54/60)
+PII document-level     P 96.0%  R 96.0%  F1 96.0%   (macro F1 94.4%)
+PII span-level         P 94.1%  R 92.2%  F1 93.1%
+```
+
+**Both industry misses are arguable rather than clearly wrong**, which is worth saying
+plainly:
+
+- A *Tax Return* labelled `finance` in gold (it came from Nemotron's Finance domain)
+  was called `government/tax_return`. An individual income-tax filing is genuinely
+  both; `tax_return` exists under both industries precisely because of that.
+- An *Immigration Form* whose text is `"Please fill out the following form..."`
+  followed by name, date of birth, country and address was called `other` at
+  confidence 0.40. The gold label comes from Nemotron's `domain` field; the document
+  body carries no immigration signal at all. This is the `other` escape hatch working.
+
+The five subcategory misses are all intra-healthcare confusions between overlapping
+clinical types (`emergency_medical_information` → `patient_assessment`,
+`medical_record` → `lab_results`).
+
+**Confidence is well calibrated and usable as a filter.** Correct predictions averaged
+0.897; the two errors scored 0.72 and 0.40. Dropping everything below 0.80 removes both
+errors while keeping 54 of the 58 correct labels — so `industry.confidence` is a real
+quality signal, not decoration.
+
+On the 24 real web documents (no gold available), the judge agreed with the corpus
+index's own topic on 10, disagreed on 5, and returned `other` on 9 — a reminder that
+the corpus topic is one classifier's output, not ground truth, which is why it is
+stored as provenance rather than used as a label.
+
+Weakest PII labels by document-level F1: `occupation` (0.74, recall 0.64), `gender`
+(0.80, precision 0.67), `date_time` (0.80), `certificate_license_number` (0.80),
+`postcode` (0.86). Those are where prompt work should go next.
 
 ## Tests
 

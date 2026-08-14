@@ -1,0 +1,391 @@
+"""Command line interface.
+
+    python -m datax taxonomy                 inspect and validate the taxonomies
+    python -m datax fetch nemotron           render gold-labelled .docx from Nemotron-PII
+    python -m datax fetch corpus             download real .docx via the docx-corpus index
+    python -m datax judge <dir>              classify .docx files into a manifest
+    python -m datax validate <manifest>      check a manifest for internal consistency
+    python -m datax stats <manifest>         dataset statistics and coverage gaps
+    python -m datax evaluate <gold> <pred>   score judged labels against gold
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+from .extract import DocxReadError, extract_docx, looks_like_docx
+from .manifest import SourceInfo, read_manifest, validate_manifest, write_manifest
+from .taxonomy import default_taxonomy
+
+DEFAULT_DOC_DIR = "datax/data/documents"
+DEFAULT_MANIFEST = "datax/data/manifest.jsonl"
+DEFAULT_GOLD = "datax/data/gold.jsonl"
+
+
+# ---------------------------------------------------------------------------
+
+
+def cmd_taxonomy(args: argparse.Namespace) -> int:
+    taxonomy = default_taxonomy()
+    if args.json:
+        payload = {
+            "industry_version": taxonomy.industry_version,
+            "pii_version": taxonomy.pii_version,
+            "industries": {
+                ind.id: {
+                    "label": ind.label,
+                    "categories": {
+                        cat.id: [s.id for s in cat.subcategories] for cat in ind.categories
+                    },
+                }
+                for ind in taxonomy.industries
+            },
+            "pii_labels": taxonomy.pii_ids,
+        }
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    print(f"industry taxonomy v{taxonomy.industry_version}")
+    total_subs = 0
+    for ind in taxonomy.industries:
+        subs = taxonomy.subcategories(ind.id)
+        total_subs += len(subs)
+        print(f"  {ind.id:12s} {len(ind.categories):2d} categories, {len(subs):3d} subcategories")
+    print(f"  {'TOTAL':12s} {total_subs:3d} subcategories across {len(taxonomy.industries)} industries")
+    print()
+    print(f"PII taxonomy v{taxonomy.pii_version}: {len(taxonomy.pii_labels)} labels")
+    groups: dict[str, int] = {}
+    for label in taxonomy.pii_labels:
+        groups[label.group] = groups.get(label.group, 0) + 1
+    for group, count in groups.items():
+        print(f"  {group:16s} {count:2d}")
+    phi = sum(1 for p in taxonomy.pii_labels if p.phi)
+    special = sum(1 for p in taxonomy.pii_labels if p.special_category)
+    print(f"  ({phi} PHI-relevant, {special} special-category)")
+
+    crosswalk = taxonomy.nemotron_crosswalk()
+    print()
+    print(f"Nemotron document_type crosswalk entries: {len(crosswalk)}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+
+
+def cmd_fetch(args: argparse.Namespace) -> int:
+    out_dir = Path(args.out)
+    taxonomy = default_taxonomy()
+
+    if args.provider == "nemotron":
+        from .sources import nemotron
+
+        report, records = nemotron.fetch(
+            out_dir,
+            split=args.split,
+            per_domain=args.per_group,
+            cache_dir=args.cache_dir,
+            taxonomy=taxonomy,
+        )
+        print(report.summary())
+        if records:
+            written = write_manifest(args.gold, records)
+            print(f"wrote {written} gold record(s) to {args.gold}")
+        return 0 if report.written else 1
+
+    if args.provider == "corpus":
+        from .sources import docxcorpus
+
+        report, provenance = docxcorpus.fetch(
+            out_dir,
+            per_industry=args.per_group,
+            cache_dir=args.cache_dir,
+            delay_seconds=args.delay,
+        )
+        print(report.summary())
+        # Persist provenance so `judge` can attribute each file to its index entry.
+        prov_path = Path(args.cache_dir) / "corpus-provenance.json"
+        prov_path.parent.mkdir(parents=True, exist_ok=True)
+        prov_path.write_text(
+            json.dumps(
+                {path: entry.__dict__ for path, entry in provenance.items()},
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        print(f"wrote provenance for {len(provenance)} file(s) to {prov_path}")
+        return 0 if report.written else 1
+
+    print(f"unknown provider {args.provider!r}", file=sys.stderr)
+    return 2
+
+
+# ---------------------------------------------------------------------------
+
+
+def _load_provenance(cache_dir: str) -> dict[str, dict]:
+    path = Path(cache_dir) / "corpus-provenance.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def _source_for(path: Path, provenance: dict[str, dict]) -> SourceInfo:
+    entry = provenance.get(str(path))
+    if entry:
+        from .sources.docxcorpus import DATASET, LICENSE
+
+        return SourceInfo(
+            provider="docxcorpus",
+            reference=entry.get("url", f"{DATASET}#{entry.get('id', '')}"),
+            license=LICENSE,
+            synthetic=False,
+        )
+    return SourceInfo(provider="local", reference=str(path), license="unknown", synthetic=False)
+
+
+def cmd_judge(args: argparse.Namespace) -> int:
+    from .judge import (
+        BatchItem,
+        JudgeConfig,
+        collect_batch,
+        judge_document,
+        make_client,
+        submit_batch,
+    )
+
+    taxonomy = default_taxonomy()
+    config = JudgeConfig(
+        model=args.model,
+        effort=args.effort,
+        max_document_chars=args.max_chars,
+        occurrence_mode=args.occurrences,
+    )
+
+    root = Path(args.input)
+    paths = sorted(p for p in root.rglob("*.docx") if p.is_file() and not p.name.startswith("~$"))
+    if args.limit:
+        paths = paths[: args.limit]
+    if not paths:
+        print(f"no .docx files found under {root}", file=sys.stderr)
+        return 1
+
+    # Skip anything already in the manifest, so a re-run resumes instead of re-paying.
+    already: set[str] = set()
+    manifest_path = Path(args.manifest)
+    if manifest_path.exists() and not args.overwrite:
+        already = {r.file.sha256 for r in read_manifest(manifest_path)}
+
+    provenance = _load_provenance(args.cache_dir)
+    pending = []
+    for path in paths:
+        if not looks_like_docx(path):
+            print(f"  skip (not a docx): {path}", file=sys.stderr)
+            continue
+        try:
+            extracted = extract_docx(path)
+        except DocxReadError as exc:
+            print(f"  skip ({exc}): {path}", file=sys.stderr)
+            continue
+        if extracted.sha256 in already:
+            continue
+        if extracted.is_empty:
+            print(f"  skip (no extractable text): {path}", file=sys.stderr)
+            continue
+        pending.append((path, extracted))
+
+    print(f"{len(pending)} document(s) to judge ({len(paths) - len(pending)} skipped)")
+    if not pending:
+        return 0
+    if args.dry_run:
+        for path, extracted in pending[:10]:
+            print(f"  would judge {path} ({extracted.word_count} words)")
+        return 0
+
+    client = make_client()
+    records = []
+    failures = 0
+
+    if args.batch:
+        items = [
+            BatchItem(
+                custom_id=f"doc-{index}",
+                extracted=extracted,
+                source=_source_for(path, provenance),
+            )
+            for index, (path, extracted) in enumerate(pending)
+        ]
+        batch_id = submit_batch(client, items, taxonomy=taxonomy, config=config)
+        print(f"submitted batch {batch_id}; polling (most batches finish within an hour)")
+        while True:
+            batch = client.messages.batches.retrieve(batch_id)
+            if batch.processing_status == "ended":
+                break
+            counts = batch.request_counts
+            print(f"  status={batch.processing_status} processing={counts.processing}")
+            time.sleep(args.poll_seconds)
+        outcomes = collect_batch(client, batch_id, items, taxonomy=taxonomy, config=config)
+        for item in items:
+            outcome = outcomes.get(item.custom_id)
+            if outcome is None or not outcome.ok:
+                failures += 1
+                reason = outcome.error or outcome.refusal if outcome else "no result"
+                print(f"  ! {item.extracted.path}: {reason}", file=sys.stderr)
+                continue
+            records.append(outcome.record)
+    else:
+        for index, (path, extracted) in enumerate(pending, start=1):
+            source = _source_for(path, provenance)
+            outcome = judge_document(
+                client, extracted, source, taxonomy=taxonomy, config=config
+            )
+            if not outcome.ok:
+                failures += 1
+                print(f"  ! {path}: {outcome.error or outcome.refusal}", file=sys.stderr)
+                continue
+            records.append(outcome.record)
+            record = outcome.record
+            print(
+                f"  [{index}/{len(pending)}] {path.name}: "
+                f"{record.industry.id}/{record.industry.subcategory} "
+                f"({len(record.pii.labels)} PII label(s), "
+                f"{len(record.spans)} span(s))"
+            )
+
+    written = write_manifest(
+        args.manifest, records, append=manifest_path.exists() and not args.overwrite
+    )
+    print(f"wrote {written} record(s) to {args.manifest} ({failures} failure(s))")
+    return 0 if written else 1
+
+
+# ---------------------------------------------------------------------------
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    taxonomy = default_taxonomy()
+    report = validate_manifest(args.manifest, taxonomy)
+    print(f"{report.valid}/{report.total} record(s) valid")
+    if report.duplicate_uids:
+        print(f"duplicate uids: {len(report.duplicate_uids)}")
+    if report.duplicate_sha256:
+        print(f"duplicate file hashes: {len(report.duplicate_sha256)}")
+    for uid, problems in list(report.problems.items())[: args.max_report]:
+        print(f"\n{uid}:")
+        for problem in problems:
+            print(f"  - {problem}")
+    if len(report.problems) > args.max_report:
+        print(f"\n... and {len(report.problems) - args.max_report} more record(s) with problems")
+    return 0 if report.ok else 1
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    from . import stats as stats_module
+
+    taxonomy = default_taxonomy()
+    stats = stats_module.compute(read_manifest(args.manifest), taxonomy)
+    if args.json:
+        print(json.dumps(stats.to_dict(), indent=2, ensure_ascii=False))
+    else:
+        print(stats.summary())
+    if args.out:
+        stats_module.write_json(args.out, stats)
+        print(f"\nwrote {args.out}")
+    return 0
+
+
+def cmd_evaluate(args: argparse.Namespace) -> int:
+    from .evaluate import evaluate_files
+
+    report = evaluate_files(args.gold, args.predicted)
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(report.summary())
+    if report.matched == 0:
+        print(
+            "\nno documents matched between gold and predicted manifests "
+            "(they are joined on file.sha256)",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+# ---------------------------------------------------------------------------
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="datax", description="Build a classified .docx dataset for ML file classification."
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_tax = sub.add_parser("taxonomy", help="inspect and validate the taxonomies")
+    p_tax.add_argument("--json", action="store_true")
+    p_tax.set_defaults(func=cmd_taxonomy)
+
+    p_fetch = sub.add_parser("fetch", help="download or render source documents")
+    p_fetch.add_argument("provider", choices=["nemotron", "corpus"])
+    p_fetch.add_argument("--out", default=DEFAULT_DOC_DIR)
+    p_fetch.add_argument(
+        "--per-group",
+        type=int,
+        default=25,
+        help="documents per industry (corpus) or per Nemotron domain",
+    )
+    p_fetch.add_argument("--split", default="train", choices=["train", "test"])
+    p_fetch.add_argument("--cache-dir", default="datax/data/cache")
+    p_fetch.add_argument("--gold", default=DEFAULT_GOLD, help="where to write gold records")
+    p_fetch.add_argument("--delay", type=float, default=0.25, help="seconds between downloads")
+    p_fetch.set_defaults(func=cmd_fetch)
+
+    p_judge = sub.add_parser("judge", help="classify .docx files with the LLM judge")
+    p_judge.add_argument("input", nargs="?", default=DEFAULT_DOC_DIR)
+    p_judge.add_argument("--manifest", default=DEFAULT_MANIFEST)
+    p_judge.add_argument("--model", default="claude-opus-5")
+    p_judge.add_argument("--effort", default="medium", choices=["low", "medium", "high", "xhigh", "max"])
+    p_judge.add_argument("--max-chars", type=int, default=60_000)
+    p_judge.add_argument("--occurrences", default="all", choices=["all", "first"])
+    p_judge.add_argument("--limit", type=int, default=0)
+    p_judge.add_argument("--batch", action="store_true", help="use the Batches API (50%% cheaper)")
+    p_judge.add_argument("--poll-seconds", type=int, default=60)
+    p_judge.add_argument("--overwrite", action="store_true", help="replace the manifest")
+    p_judge.add_argument("--dry-run", action="store_true", help="list work without calling the API")
+    p_judge.add_argument("--cache-dir", default="datax/data/cache")
+    p_judge.set_defaults(func=cmd_judge)
+
+    p_val = sub.add_parser("validate", help="check a manifest for internal consistency")
+    p_val.add_argument("manifest", nargs="?", default=DEFAULT_MANIFEST)
+    p_val.add_argument("--max-report", type=int, default=20)
+    p_val.set_defaults(func=cmd_validate)
+
+    p_stats = sub.add_parser("stats", help="dataset statistics and coverage gaps")
+    p_stats.add_argument("manifest", nargs="?", default=DEFAULT_MANIFEST)
+    p_stats.add_argument("--json", action="store_true")
+    p_stats.add_argument("--out", help="also write statistics to this JSON file")
+    p_stats.set_defaults(func=cmd_stats)
+
+    p_eval = sub.add_parser("evaluate", help="score judged labels against gold labels")
+    p_eval.add_argument("gold", nargs="?", default=DEFAULT_GOLD)
+    p_eval.add_argument("predicted", nargs="?", default=DEFAULT_MANIFEST)
+    p_eval.add_argument("--json", action="store_true")
+    p_eval.set_defaults(func=cmd_evaluate)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

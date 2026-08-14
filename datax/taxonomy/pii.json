@@ -1,0 +1,101 @@
+{
+  "version": "1.0.0",
+  "name": "datax-pii",
+  "description": "PII/PHI entity taxonomy. The label set is byte-for-byte the span-label vocabulary of nvidia/Nemotron-PII, so spans emitted against this taxonomy are directly comparable with that dataset.",
+  "compatibility": {
+    "dataset": "nvidia/Nemotron-PII",
+    "url": "https://huggingface.co/datasets/nvidia/Nemotron-PII",
+    "license": "cc-by-4.0",
+    "label_count": 55,
+    "derivation": "Distinct `label` values across all `spans` in both the train and test splits (100,000 rows each). Both splits yield exactly the same 55 labels. The dataset card says '55+ PII/PHI categories'; the measured vocabulary is exactly 55.",
+    "verified_against": "data/train-00000-of-00001.parquet, data/test-00000-of-00001.parquet"
+  },
+  "groups": {
+    "identity": "Names and account-scoped identifiers for a person.",
+    "contact": "Ways to reach a person or entity.",
+    "location": "Physical or geographic location.",
+    "government_id": "Identifiers issued by a government or licensing authority.",
+    "financial": "Payment instruments and banking identifiers.",
+    "health": "Health-plan and clinical identifiers (HIPAA-relevant).",
+    "biometric": "Measurements of the body used for identification.",
+    "credential": "Secrets that grant access to a system.",
+    "network": "Identifiers for a device or network endpoint.",
+    "demographic": "Attributes of a person, several of which are special-category data.",
+    "temporal": "Dates and times that can act as quasi-identifiers.",
+    "organization": "Named organizations."
+  },
+  "sensitivity_levels": {
+    "critical": "Direct compromise if disclosed: credentials, payment instruments, government IDs.",
+    "high": "Directly identifies an individual, or is special-category data under GDPR Art. 9.",
+    "medium": "Identifies an individual in combination with other fields.",
+    "low": "Quasi-identifier; rarely identifying on its own."
+  },
+  "labels": [
+    { "id": "first_name", "group": "identity", "sensitivity": "high", "phi": true, "special_category": false, "description": "A person's given name." },
+    { "id": "last_name", "group": "identity", "sensitivity": "high", "phi": true, "special_category": false, "description": "A person's family name or surname." },
+    { "id": "user_name", "group": "identity", "sensitivity": "medium", "phi": false, "special_category": false, "description": "A login handle or screen name for an account or system." },
+    { "id": "customer_id", "group": "identity", "sensitivity": "medium", "phi": true, "special_category": false, "description": "An identifier assigned to a customer or client by an organization." },
+    { "id": "employee_id", "group": "identity", "sensitivity": "medium", "phi": false, "special_category": false, "description": "An identifier assigned to a worker by their employer." },
+    { "id": "unique_id", "group": "identity", "sensitivity": "medium", "phi": true, "special_category": false, "description": "A record, case, reference, or tracking identifier that is not covered by a more specific label." },
+
+    { "id": "email", "group": "contact", "sensitivity": "high", "phi": true, "special_category": false, "description": "An email address." },
+    { "id": "phone_number", "group": "contact", "sensitivity": "high", "phi": true, "special_category": false, "description": "A telephone number, including mobile and landline." },
+    { "id": "fax_number", "group": "contact", "sensitivity": "medium", "phi": true, "special_category": false, "description": "A facsimile number." },
+    { "id": "url", "group": "contact", "sensitivity": "low", "phi": true, "special_category": false, "description": "A web address. PHI-relevant when it resolves to a person-specific resource." },
+
+    { "id": "street_address", "group": "location", "sensitivity": "high", "phi": true, "special_category": false, "description": "A street-level postal address, including building and unit number." },
+    { "id": "city", "group": "location", "sensitivity": "medium", "phi": true, "special_category": false, "description": "A city, town, or municipality name." },
+    { "id": "state", "group": "location", "sensitivity": "low", "phi": true, "special_category": false, "description": "A state, province, or top-level administrative region." },
+    { "id": "county", "group": "location", "sensitivity": "medium", "phi": true, "special_category": false, "description": "A county or equivalent second-level administrative region." },
+    { "id": "country", "group": "location", "sensitivity": "low", "phi": false, "special_category": false, "description": "A country name or code." },
+    { "id": "postcode", "group": "location", "sensitivity": "medium", "phi": true, "special_category": false, "description": "A postal or ZIP code." },
+    { "id": "coordinate", "group": "location", "sensitivity": "high", "phi": true, "special_category": false, "description": "A geographic coordinate pair (latitude/longitude)." },
+
+    { "id": "ssn", "group": "government_id", "sensitivity": "critical", "phi": true, "special_category": false, "description": "A U.S. Social Security Number." },
+    { "id": "national_id", "group": "government_id", "sensitivity": "critical", "phi": true, "special_category": false, "description": "A non-U.S. national identity number, passport number, or equivalent state-issued personal identifier." },
+    { "id": "tax_id", "group": "government_id", "sensitivity": "critical", "phi": false, "special_category": false, "description": "A taxpayer identification number for a person or business (e.g. EIN, ITIN, VAT number)." },
+    { "id": "certificate_license_number", "group": "government_id", "sensitivity": "critical", "phi": true, "special_category": false, "description": "A certificate, professional licence, or permit number, including driver's licence numbers." },
+    { "id": "license_plate", "group": "government_id", "sensitivity": "high", "phi": true, "special_category": false, "description": "A vehicle registration plate number." },
+    { "id": "vehicle_identifier", "group": "government_id", "sensitivity": "high", "phi": true, "special_category": false, "description": "A vehicle identification number (VIN) or equivalent serial identifier for a vehicle." },
+
+    { "id": "account_number", "group": "financial", "sensitivity": "critical", "phi": true, "special_category": false, "description": "A bank, brokerage, utility, or other financial account number." },
+    { "id": "bank_routing_number", "group": "financial", "sensitivity": "critical", "phi": false, "special_category": false, "description": "A bank routing, sort-code, or IBAN-style transit number." },
+    { "id": "credit_debit_card", "group": "financial", "sensitivity": "critical", "phi": false, "special_category": false, "description": "A payment card number (PAN)." },
+    { "id": "cvv", "group": "financial", "sensitivity": "critical", "phi": false, "special_category": false, "description": "A payment card verification value." },
+    { "id": "swift_bic", "group": "financial", "sensitivity": "high", "phi": false, "special_category": false, "description": "A SWIFT or BIC bank identifier code." },
+    { "id": "pin", "group": "financial", "sensitivity": "critical", "phi": false, "special_category": false, "description": "A personal identification number used to authorize a card or account." },
+
+    { "id": "medical_record_number", "group": "health", "sensitivity": "critical", "phi": true, "special_category": true, "description": "A medical record number (MRN) assigned by a provider." },
+    { "id": "health_plan_beneficiary_number", "group": "health", "sensitivity": "critical", "phi": true, "special_category": true, "description": "A health-plan member, beneficiary, or subscriber number." },
+    { "id": "blood_type", "group": "health", "sensitivity": "high", "phi": true, "special_category": true, "description": "An ABO/Rh blood group." },
+
+    { "id": "biometric_identifier", "group": "biometric", "sensitivity": "critical", "phi": true, "special_category": true, "description": "A biometric measurement or template: fingerprint, iris, face, voice, gait, or similar." },
+
+    { "id": "password", "group": "credential", "sensitivity": "critical", "phi": false, "special_category": false, "description": "A password or passphrase, including temporary and one-time values." },
+    { "id": "api_key", "group": "credential", "sensitivity": "critical", "phi": false, "special_category": false, "description": "An API key, access token, or client secret." },
+    { "id": "http_cookie", "group": "credential", "sensitivity": "high", "phi": false, "special_category": false, "description": "An HTTP cookie name/value, including session cookies." },
+
+    { "id": "ipv4", "group": "network", "sensitivity": "medium", "phi": true, "special_category": false, "description": "An IPv4 address." },
+    { "id": "ipv6", "group": "network", "sensitivity": "medium", "phi": true, "special_category": false, "description": "An IPv6 address." },
+    { "id": "mac_address", "group": "network", "sensitivity": "medium", "phi": true, "special_category": false, "description": "A network interface hardware (MAC) address." },
+    { "id": "device_identifier", "group": "network", "sensitivity": "medium", "phi": true, "special_category": false, "description": "A device serial number, IMEI, advertising ID, or equivalent hardware identifier." },
+
+    { "id": "age", "group": "demographic", "sensitivity": "medium", "phi": true, "special_category": false, "description": "A person's age. Ages over 89 are direct identifiers under HIPAA." },
+    { "id": "date_of_birth", "group": "demographic", "sensitivity": "high", "phi": true, "special_category": false, "description": "A date of birth." },
+    { "id": "gender", "group": "demographic", "sensitivity": "medium", "phi": true, "special_category": false, "description": "A gender or sex value recorded for a person." },
+    { "id": "race_ethnicity", "group": "demographic", "sensitivity": "high", "phi": true, "special_category": true, "description": "A racial or ethnic origin." },
+    { "id": "religious_belief", "group": "demographic", "sensitivity": "high", "phi": false, "special_category": true, "description": "A religious or philosophical belief." },
+    { "id": "political_view", "group": "demographic", "sensitivity": "high", "phi": false, "special_category": true, "description": "A political opinion or party affiliation." },
+    { "id": "sexuality", "group": "demographic", "sensitivity": "high", "phi": true, "special_category": true, "description": "Sexual orientation." },
+    { "id": "language", "group": "demographic", "sensitivity": "low", "phi": false, "special_category": false, "description": "A language a person speaks or prefers." },
+    { "id": "education_level", "group": "demographic", "sensitivity": "low", "phi": false, "special_category": false, "description": "An attained level of education or a named qualification." },
+    { "id": "employment_status", "group": "demographic", "sensitivity": "low", "phi": false, "special_category": false, "description": "Employment status such as employed, unemployed, retired, or student." },
+    { "id": "occupation", "group": "demographic", "sensitivity": "low", "phi": false, "special_category": false, "description": "A person's job title, profession, or role." },
+
+    { "id": "date", "group": "temporal", "sensitivity": "low", "phi": true, "special_category": false, "description": "A calendar date. Dates tied to an individual are direct identifiers under HIPAA." },
+    { "id": "time", "group": "temporal", "sensitivity": "low", "phi": true, "special_category": false, "description": "A time of day." },
+    { "id": "date_time", "group": "temporal", "sensitivity": "low", "phi": true, "special_category": false, "description": "A combined date and time value." },
+
+    { "id": "company_name", "group": "organization", "sensitivity": "low", "phi": false, "special_category": false, "description": "The name of a company, agency, institution, or other organization." }
+  ]
+}

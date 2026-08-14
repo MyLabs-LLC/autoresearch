@@ -1,0 +1,38 @@
+[project]
+name = "datax"
+version = "0.1.0"
+description = "A classified .docx dataset for ML file classification: industry tags, PII/PHI tags, LLM-as-judge labelling"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # Reading .docx and building manifests needs nothing beyond the standard library.
+    # pyarrow is required by both source fetchers to read their index/data parquet.
+    "pyarrow>=15.0",
+]
+
+[project.optional-dependencies]
+# Writing .docx (only the nemotron source needs this).
+docx = ["python-docx>=1.1"]
+# Calling the judge.
+judge = ["anthropic>=0.69"]
+# Faster, resumable, authenticated downloads from the Hugging Face Hub.
+hub = ["huggingface-hub>=0.26"]
+all = ["python-docx>=1.1", "anthropic>=0.69", "huggingface-hub>=0.26"]
+dev = ["pytest>=8.0", "python-docx>=1.1"]
+
+[project.scripts]
+datax = "datax.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/datax"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"taxonomy" = "datax/taxonomy"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

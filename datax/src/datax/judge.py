@@ -61,6 +61,8 @@ class JudgeConfig:
     occurrence_mode: str = "all"
     cache_taxonomy: bool = True
     max_retries: int = 3
+    max_cost_usd: float = 0.0
+    """Per-document spend ceiling, enforced by the claude-code backend. 0 disables."""
 
 
 def _now() -> str:
@@ -295,6 +297,7 @@ class JudgeOutcome:
     error: str | None = None
     refusal: str | None = None
     usage: dict[str, int] = field(default_factory=dict)
+    cost_usd: float = 0.0
 
     @property
     def ok(self) -> bool:
@@ -461,44 +464,61 @@ def outcome_from_message(
 # ---------------------------------------------------------------------------
 
 
-def make_client(api_key: str | None = None):
-    """Build an Anthropic client. Credentials resolve from the environment
-    (``ANTHROPIC_API_KEY``, ``ANTHROPIC_AUTH_TOKEN``, or an ``ant auth login``
-    profile), so an explicit key is only needed to override that."""
+def outcome_from_backend(
+    response,
+    *,
+    extracted: ExtractedDocx,
+    source: SourceInfo,
+    taxonomy: Taxonomy,
+    config: JudgeConfig,
+) -> JudgeOutcome:
+    """Turn a :class:`datax.backends.BackendResponse` into a judge outcome."""
+    if response.refusal:
+        return JudgeOutcome(
+            record=None, refusal=response.refusal, usage=response.usage,
+            cost_usd=response.cost_usd,
+        )
+    if response.error or response.payload is None:
+        return JudgeOutcome(
+            record=None, error=response.error or "backend returned no payload",
+            usage=response.usage, cost_usd=response.cost_usd,
+        )
     try:
-        import anthropic
-    except ImportError as exc:  # pragma: no cover - environment dependent
-        raise JudgeError(
-            "judging requires the anthropic SDK; install the datax extra:\n"
-            "  uv pip install -e 'datax[judge]'   (or: pip install anthropic)"
-        ) from exc
-    return anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+        record = record_from_payload(
+            response.payload,
+            extracted=extracted,
+            source=source,
+            taxonomy=taxonomy,
+            config=config,
+            truncated=response.truncated,
+            usage=response.usage,
+        )
+    except (JudgeError, KeyError, TypeError, ValueError) as exc:
+        return JudgeOutcome(
+            record=None, error=f"invalid judge payload: {exc}",
+            usage=response.usage, cost_usd=response.cost_usd,
+        )
+    return JudgeOutcome(record=record, usage=response.usage, cost_usd=response.cost_usd)
 
 
 def judge_document(
-    client: Any,
+    backend,
     extracted: ExtractedDocx,
     source: SourceInfo,
     *,
     taxonomy: Taxonomy | None = None,
     config: JudgeConfig | None = None,
 ) -> JudgeOutcome:
-    """Classify one document with a single API call."""
+    """Classify one document using the given backend."""
     taxonomy = taxonomy or default_taxonomy()
     config = config or JudgeConfig()
 
     if extracted.is_empty:
         return JudgeOutcome(record=None, error="document has no extractable text")
 
-    params, truncated = build_request_params(extracted.text, taxonomy, config)
-    message = client.with_options(max_retries=config.max_retries).messages.create(**params)
-    return outcome_from_message(
-        message,
-        extracted=extracted,
-        source=source,
-        taxonomy=taxonomy,
-        config=config,
-        truncated=truncated,
+    response = backend.classify(extracted.text, taxonomy, config)
+    return outcome_from_backend(
+        response, extracted=extracted, source=source, taxonomy=taxonomy, config=config
     )
 
 
@@ -524,8 +544,12 @@ def submit_batch(
 ) -> str:
     """Submit documents to the Batches API and return the batch id.
 
-    Batch runs at half price and is the right default for building a dataset, where
-    nothing is latency-sensitive. All requests share one cached system prefix.
+    Batch runs at half price and is the right choice for building a large corpus,
+    where nothing is latency-sensitive. All requests share one cached system prefix.
+
+    **Anthropic backend only** -- ``client`` is an ``anthropic.Anthropic``. The
+    Batches API is a Messages API feature; Claude Code has no equivalent, so the
+    claude-code backend judges documents one at a time.
     """
     taxonomy = taxonomy or default_taxonomy()
     config = config or JudgeConfig()

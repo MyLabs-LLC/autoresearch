@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from datax.backends import AnthropicBackend
 from datax.evaluate import compare
 from datax.extract import extract_docx
 from datax.judge import JudgeConfig, judge_document
@@ -96,7 +97,7 @@ def test_end_to_end_judge_to_validated_manifest(tmp_path, document):
     client = StubClient(JUDGE_PAYLOAD)
     source = SourceInfo(provider="test", reference="pipeline-test", synthetic=True)
 
-    outcome = judge_document(client, document, source, taxonomy=taxonomy, config=JudgeConfig())
+    outcome = judge_document(AnthropicBackend(client), document, source, taxonomy=taxonomy, config=JudgeConfig())
     assert outcome.ok
 
     record = outcome.record
@@ -156,7 +157,7 @@ def test_evaluate_scores_judge_against_gold(tmp_path, document):
 
     client = StubClient(JUDGE_PAYLOAD)
     predicted = judge_document(
-        client,
+        AnthropicBackend(client),
         document,
         SourceInfo(provider="test", reference="p", synthetic=True),
         taxonomy=taxonomy,
@@ -205,7 +206,8 @@ def test_records_are_joined_on_content_hash_not_uid(tmp_path, document):
     taxonomy = default_taxonomy()
     client = StubClient(JUDGE_PAYLOAD)
     predicted = judge_document(
-        client, document, SourceInfo(provider="t", reference="r"), taxonomy=taxonomy
+        AnthropicBackend(client), document, SourceInfo(provider="t", reference="r"),
+        taxonomy=taxonomy,
     ).record
     gold = build_record(
         taxonomy=taxonomy,
@@ -233,7 +235,8 @@ def test_manifest_survives_a_write_read_validate_cycle(tmp_path, document):
     taxonomy = default_taxonomy()
     client = StubClient(JUDGE_PAYLOAD)
     record = judge_document(
-        client, document, SourceInfo(provider="t", reference="r"), taxonomy=taxonomy
+        AnthropicBackend(client), document, SourceInfo(provider="t", reference="r"),
+        taxonomy=taxonomy,
     ).record
     path = tmp_path / "m.jsonl"
     write_manifest(path, [record])

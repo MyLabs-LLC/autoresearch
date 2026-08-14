@@ -134,9 +134,43 @@ prompt; the document is the volatile part and goes after it. Rendering is determ
 Watch `usage.cache_read_input_tokens` — if it stays at zero across documents, something
 is invalidating the prefix.
 
-Model is `claude-opus-5` with structured outputs, adaptive thinking, and `effort`
-defaulting to `medium`. `--batch` routes through the Batches API at half price, which
-is the right default for dataset construction where nothing is latency-sensitive.
+Model is `claude-opus-5` with structured outputs and `effort` defaulting to `medium`.
+
+### Two judge backends
+
+| | `claude-code` (default) | `anthropic` |
+|---|---|---|
+| Credentials | none — reuses Claude Code's own auth | `ANTHROPIC_API_KEY` or `ant auth login` |
+| Transport | `claude-agent-sdk` → local `claude` CLI | Messages API |
+| Schema enforcement | `output_format` json_schema | `output_config.format` json_schema |
+| Batching | no | yes, `--batch`, 50% cheaper |
+| Measured cost | ~$0.15 first doc, ~$0.02–0.05 after | lower, especially batched |
+
+Both send the *same* prompt and the *same* schema. The Agent SDK's `output_format`
+mirrors the Messages API's `output_config.format`, so the enum is hard-enforced either
+way rather than being a request the model may ignore.
+
+The `claude-code` backend strips the agent down to a single-turn classifier, which
+matters more than it sounds:
+
+- **`system_prompt` replaces** Claude Code's default instead of appending to it. The
+  default is ~38K tokens of coding-agent instructions and tool schemas — a trivial
+  `claude -p "Say OK"` in this container cost **$0.23** because of it.
+- **`tools=[]`** — the judge reads one document and returns JSON. A filesystem would be
+  an unnecessary capability and more tokens.
+- **`setting_sources=[]`** — project `CLAUDE.md`, settings and skills are not loaded.
+  Beyond token cost, loading them would make the cached prefix depend on which checkout
+  it runs in, so results would drift between machines.
+- **`max_turns=1`** — one question, one answer, no agentic loop.
+
+**The prompt cache works across separate CLI invocations**, because it is account-scoped
+rather than session-scoped. Measured here: first document $0.151 with 13.7K cache-creation
+tokens, every document after it `cache_read=13305` at $0.02–0.05. That 5–7× drop is
+the entire payoff of rendering the taxonomy deterministically — one changed byte and
+every document pays full price again.
+
+Use `anthropic --batch` when building a large corpus and `claude-code` when you want it
+to just work without provisioning a key.
 
 ---
 
@@ -145,12 +179,14 @@ is the right default for dataset construction where nothing is latency-sensitive
 ```bash
 cd datax
 uv venv && uv pip install -e '.[all,dev]'
-export ANTHROPIC_API_KEY=...        # or: ant auth login
 ```
 
+No API key is needed with the default `claude-code` backend — it uses Claude Code's own
+credentials. For the `anthropic` backend, set `ANTHROPIC_API_KEY` or run `ant auth login`.
+
 Reading `.docx` and building manifests needs no third-party parser — only `pyarrow`,
-for the source indexes. `python-docx` is needed to *write* documents (the `nemotron`
-source) and `anthropic` to run the judge.
+for the source indexes. Extras: `docx` to *write* documents (the `nemotron` source),
+`agent` for the Claude Code backend, `judge` for the Messages API backend.
 
 ## Use
 
@@ -158,10 +194,17 @@ source) and `anthropic` to run the judge.
 python -m datax taxonomy                       # counts, groups, crosswalk size
 python -m datax fetch nemotron --per-group 40  # gold-labelled .docx  -> data/gold.jsonl
 python -m datax fetch corpus  --per-group 40   # real .docx from the public web
-python -m datax judge --batch                  # classify everything -> data/manifest.jsonl
+python -m datax judge                          # classify everything -> data/manifest.jsonl
 python -m datax validate                       # internal consistency
 python -m datax stats --out data/stats.json    # distribution + coverage gaps
 python -m datax evaluate                       # judge vs gold: accuracy, P/R/F1
+```
+
+`judge` defaults to the Claude Code backend. For the API instead:
+
+```bash
+python -m datax judge --backend anthropic --batch      # half price, no key-free path
+python -m datax judge --max-cost-per-doc 0.10          # spend ceiling per document
 ```
 
 `judge` is resumable: documents already present in the manifest (matched on content

@@ -15,10 +15,12 @@ dependencies = [
 docx = ["python-docx>=1.1"]
 # Calling the judge.
 judge = ["anthropic>=0.69"]
+# Judging through the local Claude Code agent (no separate API key needed).
+agent = ["claude-agent-sdk>=0.2", "anyio>=4.0"]
 # Faster, resumable, authenticated downloads from the Hugging Face Hub.
 hub = ["huggingface-hub>=0.26"]
-all = ["python-docx>=1.1", "anthropic>=0.69", "huggingface-hub>=0.26"]
-dev = ["pytest>=8.0", "python-docx>=1.1"]
+all = ["python-docx>=1.1", "anthropic>=0.69", "huggingface-hub>=0.26", "claude-agent-sdk>=0.2", "anyio>=4.0"]
+dev = ["pytest>=8.0", "python-docx>=1.1", "claude-agent-sdk>=0.2", "anyio>=4.0"]
 
 [project.scripts]
 datax = "datax.cli:main"

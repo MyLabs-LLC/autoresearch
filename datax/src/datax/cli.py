@@ -151,14 +151,8 @@ def _source_for(path: Path, provenance: dict[str, dict]) -> SourceInfo:
 
 
 def cmd_judge(args: argparse.Namespace) -> int:
-    from .judge import (
-        BatchItem,
-        JudgeConfig,
-        collect_batch,
-        judge_document,
-        make_client,
-        submit_batch,
-    )
+    from .backends import BackendError, make_backend
+    from .judge import BatchItem, JudgeConfig, collect_batch, judge_document, submit_batch
 
     taxonomy = default_taxonomy()
     config = JudgeConfig(
@@ -166,7 +160,16 @@ def cmd_judge(args: argparse.Namespace) -> int:
         effort=args.effort,
         max_document_chars=args.max_chars,
         occurrence_mode=args.occurrences,
+        max_cost_usd=args.max_cost_per_doc,
     )
+
+    if args.batch and args.backend != "anthropic":
+        print(
+            "--batch requires --backend anthropic; the Batches API is a Messages API "
+            "feature and Claude Code has no equivalent.",
+            file=sys.stderr,
+        )
+        return 2
 
     root = Path(args.input)
     paths = sorted(p for p in root.rglob("*.docx") if p.is_file() and not p.name.startswith("~$"))
@@ -200,7 +203,10 @@ def cmd_judge(args: argparse.Namespace) -> int:
             continue
         pending.append((path, extracted))
 
-    print(f"{len(pending)} document(s) to judge ({len(paths) - len(pending)} skipped)")
+    print(
+        f"{len(pending)} document(s) to judge ({len(paths) - len(pending)} skipped) "
+        f"via backend {args.backend!r}"
+    )
     if not pending:
         return 0
     if args.dry_run:
@@ -208,11 +214,22 @@ def cmd_judge(args: argparse.Namespace) -> int:
             print(f"  would judge {path} ({extracted.word_count} words)")
         return 0
 
-    client = make_client()
+    # Truncating up front keeps the incremental append below simple and correct.
+    if args.overwrite and manifest_path.exists():
+        manifest_path.unlink()
+
+    try:
+        backend = make_backend(args.backend)
+    except BackendError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
     records = []
     failures = 0
+    total_cost = 0.0
 
     if args.batch:
+        client = backend.client
         items = [
             BatchItem(
                 custom_id=f"doc-{index}",
@@ -243,25 +260,34 @@ def cmd_judge(args: argparse.Namespace) -> int:
         for index, (path, extracted) in enumerate(pending, start=1):
             source = _source_for(path, provenance)
             outcome = judge_document(
-                client, extracted, source, taxonomy=taxonomy, config=config
+                backend, extracted, source, taxonomy=taxonomy, config=config
             )
+            total_cost += outcome.cost_usd
             if not outcome.ok:
                 failures += 1
                 print(f"  ! {path}: {outcome.error or outcome.refusal}", file=sys.stderr)
                 continue
             records.append(outcome.record)
             record = outcome.record
+            cached = outcome.usage.get("cache_read_input_tokens", 0)
             print(
                 f"  [{index}/{len(pending)}] {path.name}: "
                 f"{record.industry.id}/{record.industry.subcategory} "
                 f"({len(record.pii.labels)} PII label(s), "
                 f"{len(record.spans)} span(s))"
+                + (f"  ${outcome.cost_usd:.4f}" if outcome.cost_usd else "")
+                + (f" cache_read={cached}" if cached else "")
             )
+            # Append as we go: a run that dies at document 80 must not throw away the
+            # 79 classifications already paid for.
+            write_manifest(args.manifest, [outcome.record], append=True)
 
-    written = write_manifest(
-        args.manifest, records, append=manifest_path.exists() and not args.overwrite
-    )
+    written = len(records)
+    if args.batch:
+        written = write_manifest(args.manifest, records, append=True)
     print(f"wrote {written} record(s) to {args.manifest} ({failures} failure(s))")
+    if total_cost:
+        print(f"total cost: ${total_cost:.2f} (${total_cost / max(written, 1):.4f}/document)")
     return 0 if written else 1
 
 
@@ -349,6 +375,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_judge = sub.add_parser("judge", help="classify .docx files with the LLM judge")
     p_judge.add_argument("input", nargs="?", default=DEFAULT_DOC_DIR)
     p_judge.add_argument("--manifest", default=DEFAULT_MANIFEST)
+    p_judge.add_argument(
+        "--backend",
+        default="claude-code",
+        choices=["claude-code", "anthropic"],
+        help="claude-code drives the local Claude Code agent (no API key needed); "
+        "anthropic calls the Messages API and supports --batch",
+    )
+    p_judge.add_argument(
+        "--max-cost-per-doc",
+        type=float,
+        default=0.0,
+        help="per-document spend ceiling for the claude-code backend (0 = no limit)",
+    )
     p_judge.add_argument("--model", default="claude-opus-5")
     p_judge.add_argument("--effort", default="medium", choices=["low", "medium", "high", "xhigh", "max"])
     p_judge.add_argument("--max-chars", type=int, default=60_000)

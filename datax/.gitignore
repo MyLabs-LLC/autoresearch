@@ -1,0 +1,3 @@
+# Downloaded source data, rendered documents, and generated manifests.
+# Everything here is reproducible with `python -m datax fetch` + `judge`.
+data/

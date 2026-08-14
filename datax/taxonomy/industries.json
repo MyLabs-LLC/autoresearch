@@ -1,0 +1,360 @@
+{
+  "version": "1.0.0",
+  "name": "datax-industry",
+  "description": "Three-level industry taxonomy (industry -> category -> subcategory) for document classification, covering healthcare, finance and government. Every leaf subcategory carries a crosswalk to the `document_type` strings observed in nvidia/Nemotron-PII, so a document labelled here can be lined up against that dataset.",
+  "compatibility": {
+    "dataset": "nvidia/Nemotron-PII",
+    "derivation": "The Healthcare, Finance and Government domains of Nemotron-PII contain 53, 53 and 71 distinct `document_type` values respectively (176 distinct across the three). Those free-text strings were normalised and de-duplicated into the closed leaf vocabulary below; `nemotron_document_types` records the crosswalk for each leaf.",
+    "note": "Nemotron-PII's own `document_type` field is free text (1451 distinct values across 30 domains), not a closed vocabulary. This taxonomy closes it for the three target industries so that leaf labels are enumerable and gradeable."
+  },
+  "industries": [
+    {
+      "id": "healthcare",
+      "label": "Healthcare",
+      "description": "Clinical care, diagnostics, health insurance administration, and clinical research. Documents typically contain PHI.",
+      "nemotron_domains": ["Healthcare", "Pharmaceuticals", "Biotechnology", "Insurance"],
+      "categories": [
+        {
+          "id": "admission_and_discharge",
+          "label": "Admission and discharge",
+          "subcategories": [
+            { "id": "admission_record", "label": "Admission record", "description": "Record created when a patient is admitted to a facility.", "nemotron_document_types": ["Inpatient Admission Form", "hospital admission record"] },
+            { "id": "admission_checklist", "label": "Admission checklist", "description": "Checklist of steps completed at admission.", "nemotron_document_types": ["Admission Checklist"] },
+            { "id": "discharge_summary", "label": "Discharge summary", "description": "Narrative summary of an episode of care issued at discharge.", "nemotron_document_types": ["Discharge Summary", "Medical Discharge Form"] },
+            { "id": "discharge_checklist", "label": "Discharge checklist", "description": "Checklist of steps completed at discharge.", "nemotron_document_types": ["Discharge Checklist"] }
+          ]
+        },
+        {
+          "id": "clinical_records",
+          "label": "Clinical records and notes",
+          "subcategories": [
+            { "id": "medical_record", "label": "Medical record", "description": "General patient chart or medical record extract.", "nemotron_document_types": ["Medical Record"] },
+            { "id": "medical_history_form", "label": "Medical history form", "description": "Patient-reported or clinician-recorded medical history.", "nemotron_document_types": ["Medical History Form", "Health History"] },
+            { "id": "patient_demographics", "label": "Patient demographics", "description": "Demographic and registration details for a patient.", "nemotron_document_types": ["Patient Demographics"] },
+            { "id": "patient_assessment", "label": "Patient assessment", "description": "Structured clinical assessment of a patient's status.", "nemotron_document_types": ["Patient Assessment"] },
+            { "id": "physical_examination_notes", "label": "Physical examination notes", "description": "Findings from a physical examination.", "nemotron_document_types": ["Physical Examination Notes"] },
+            { "id": "consultation_notes", "label": "Consultation notes", "description": "Notes or summary from a specialist consultation.", "nemotron_document_types": ["Consultation Notes", "Consultation Summary"] },
+            { "id": "outpatient_visit_notes", "label": "Outpatient visit notes", "description": "Notes from an ambulatory or outpatient encounter.", "nemotron_document_types": ["Outpatient Visit Notes"] },
+            { "id": "surgical_report", "label": "Surgical or operative report", "description": "Operative account of a surgical procedure.", "nemotron_document_types": ["Surgical Report", "Operative Summary"] },
+            { "id": "allergy_information", "label": "Allergy information", "description": "Record of a patient's allergies and intolerances.", "nemotron_document_types": ["Allergy Information"] }
+          ]
+        },
+        {
+          "id": "diagnostics_and_labs",
+          "label": "Diagnostics and laboratory",
+          "subcategories": [
+            { "id": "diagnosis_report", "label": "Diagnosis report", "description": "Report stating a diagnosis and its basis.", "nemotron_document_types": ["Diagnosis Report"] },
+            { "id": "lab_results", "label": "Laboratory results", "description": "Results of laboratory assays, including blood work.", "nemotron_document_types": ["Lab Results", "blood test report"] },
+            { "id": "lab_specimen_label", "label": "Laboratory specimen label", "description": "Identifying label attached to a collected specimen.", "nemotron_document_types": ["lab specimen label"] },
+            { "id": "pathology_report", "label": "Pathology report", "description": "Histopathology or cytology findings.", "nemotron_document_types": ["Pathology Report", "Pathology Summary"] },
+            { "id": "imaging_report", "label": "Imaging report", "description": "Radiology or other diagnostic imaging findings.", "nemotron_document_types": ["Imaging Report", "Medical Imaging Report"] }
+          ]
+        },
+        {
+          "id": "care_planning",
+          "label": "Care planning and therapy",
+          "subcategories": [
+            { "id": "treatment_plan", "label": "Treatment plan", "description": "Planned course of clinical treatment.", "nemotron_document_types": ["Treatment Plan"] },
+            { "id": "physical_therapy_plan", "label": "Physical therapy plan", "description": "Plan of physiotherapy interventions.", "nemotron_document_types": ["Physical Therapy Plan"] },
+            { "id": "occupational_therapy_plan", "label": "Occupational therapy plan", "description": "Plan of occupational therapy interventions.", "nemotron_document_types": ["Occupational Therapy Plan"] },
+            { "id": "rehabilitation_plan", "label": "Rehabilitation plan", "description": "Plan for a course of rehabilitation.", "nemotron_document_types": ["Rehabilitation Plan"] },
+            { "id": "home_health_care_plan", "label": "Home health care plan", "description": "Plan of care to be delivered in the patient's home.", "nemotron_document_types": ["Home Health Care Plan"] }
+          ]
+        },
+        {
+          "id": "medication_and_immunisation",
+          "label": "Medication and immunisation",
+          "subcategories": [
+            { "id": "prescription", "label": "Prescription", "description": "Order for a medicine to be dispensed to a patient.", "nemotron_document_types": ["Prescription"] },
+            { "id": "medication_list", "label": "Medication list", "description": "Current or reconciled list of a patient's medicines.", "nemotron_document_types": ["Medication List"] },
+            { "id": "immunization_schedule", "label": "Immunisation schedule", "description": "Planned schedule of immunisations.", "nemotron_document_types": ["Immunization Schedule"] },
+            { "id": "vaccination_record", "label": "Vaccination record", "description": "Record of vaccines administered.", "nemotron_document_types": ["Vaccination Record"] }
+          ]
+        },
+        {
+          "id": "blood_and_transfusion",
+          "label": "Blood services and transfusion",
+          "subcategories": [
+            { "id": "blood_donor_registration_form", "label": "Blood donor registration form", "description": "Registration and eligibility form for a blood donor.", "nemotron_document_types": ["blood donor registration form"] },
+            { "id": "blood_bank_inventory_record", "label": "Blood bank inventory record", "description": "Inventory of blood products held by a blood bank.", "nemotron_document_types": ["blood bank inventory record"] },
+            { "id": "transfusion_log", "label": "Transfusion log", "description": "Log of transfusions administered to recipients.", "nemotron_document_types": ["recipient transfusion log"] },
+            { "id": "blood_type_profile", "label": "Blood type profile", "description": "Record of an individual's blood group.", "nemotron_document_types": ["Customer Blood Type Profile"] }
+          ]
+        },
+        {
+          "id": "research_and_biometrics",
+          "label": "Clinical research and biometrics",
+          "subcategories": [
+            { "id": "clinical_trial_screening_form", "label": "Clinical trial screening form", "description": "Eligibility screening for enrolment in a clinical trial.", "nemotron_document_types": ["clinical trial screening form"] },
+            { "id": "clinical_trial_biometric_file", "label": "Clinical trial biometric file", "description": "Biometric data captured for a trial participant.", "nemotron_document_types": ["clinical trial participant biometric file"] },
+            { "id": "patient_biometric_id_record", "label": "Patient biometric ID record", "description": "Biometric identity record used to identify a patient.", "nemotron_document_types": ["patient biometric ID record"] },
+            { "id": "biometric_enrollment_form", "label": "Biometric enrolment form", "description": "Form capturing biometrics at enrolment.", "nemotron_document_types": ["biometric enrollment form"] }
+          ]
+        },
+        {
+          "id": "coverage_and_billing",
+          "label": "Coverage and billing",
+          "subcategories": [
+            { "id": "health_insurance_form", "label": "Health insurance form", "description": "Enrolment, authorisation, or coverage form for health insurance.", "nemotron_document_types": ["Health Insurance Form"] },
+            { "id": "insurance_claim_form", "label": "Insurance claim form", "description": "Claim submitted against health coverage.", "nemotron_document_types": ["Insurance Claim Form"] },
+            { "id": "billing_statement", "label": "Billing statement", "description": "Statement of charges issued to a patient or payer.", "nemotron_document_types": ["Billing Statement"] }
+          ]
+        },
+        {
+          "id": "patient_administration",
+          "label": "Patient administration and communication",
+          "subcategories": [
+            { "id": "patient_consent_form", "label": "Patient consent form", "description": "Informed consent signed by or for a patient.", "nemotron_document_types": ["Patient Consent Form"] },
+            { "id": "patient_education_materials", "label": "Patient education materials", "description": "Explanatory material given to patients.", "nemotron_document_types": ["Patient Education Materials"] },
+            { "id": "medical_certificate", "label": "Medical certificate", "description": "Attestation of a medical fact, such as fitness to work.", "nemotron_document_types": ["Medical Certificate"] },
+            { "id": "emergency_medical_information", "label": "Emergency medical information", "description": "Critical clinical information for use in an emergency.", "nemotron_document_types": ["Emergency Medical Information"] },
+            { "id": "emergency_contact_information", "label": "Emergency contact information", "description": "Named contacts to reach in an emergency.", "nemotron_document_types": ["Emergency Contact Information"] },
+            { "id": "credential_notice", "label": "Credential notice", "description": "Notice delivering or changing a credential (password, PIN, access code) to a person.", "nemotron_document_types": ["temporary password notification", "ATM card PIN mailer"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "finance",
+      "label": "Finance",
+      "description": "Banking, capital markets, corporate finance, accounting, lending, and insurance underwriting.",
+      "nemotron_domains": ["Finance", "Insurance"],
+      "categories": [
+        {
+          "id": "financial_reporting",
+          "label": "Financial reporting",
+          "subcategories": [
+            { "id": "annual_report", "label": "Annual report", "description": "Yearly report on an entity's performance and position.", "nemotron_document_types": ["Annual Report"] },
+            { "id": "financial_statement", "label": "Financial statement", "description": "General-purpose financial statement or set of statements.", "nemotron_document_types": ["Financial Statement"] },
+            { "id": "balance_sheet", "label": "Balance sheet", "description": "Statement of assets, liabilities and equity at a point in time.", "nemotron_document_types": ["Balance Sheet"] },
+            { "id": "cash_flow_statement", "label": "Cash flow statement", "description": "Statement of cash inflows and outflows over a period.", "nemotron_document_types": ["Cash Flow Statement"] },
+            { "id": "profit_and_loss_statement", "label": "Profit and loss statement", "description": "Statement of income and expenses over a period.", "nemotron_document_types": ["Profit and Loss Statement"] },
+            { "id": "revenue_report", "label": "Revenue report", "description": "Report analysing revenue.", "nemotron_document_types": ["Revenue Report"] },
+            { "id": "expense_report", "label": "Expense report", "description": "Itemised report of expenses incurred.", "nemotron_document_types": ["Expense Report"] }
+          ]
+        },
+        {
+          "id": "planning_and_forecasting",
+          "label": "Planning and forecasting",
+          "subcategories": [
+            { "id": "forecast", "label": "Forecast", "description": "Projection of future financial performance.", "nemotron_document_types": ["Forecast"] },
+            { "id": "forecast_variance_report", "label": "Forecast variance report", "description": "Comparison of forecast against actuals.", "nemotron_document_types": ["Forecast Variance Report"] },
+            { "id": "budget_variance_report", "label": "Budget variance report", "description": "Comparison of budget against actuals.", "nemotron_document_types": ["Budget Variance Report"] },
+            { "id": "financial_plan", "label": "Financial plan", "description": "Plan for an entity's or individual's finances.", "nemotron_document_types": ["Financial Plan"] },
+            { "id": "business_plan", "label": "Business plan", "description": "Plan describing a business and its financial projections.", "nemotron_document_types": ["Business Plan"] },
+            { "id": "capital_allocation_report", "label": "Capital allocation report", "description": "Report on allocation of capital across uses.", "nemotron_document_types": ["Capital Allocation Report"] },
+            { "id": "debt_allocation_report", "label": "Debt allocation report", "description": "Report on allocation or composition of debt.", "nemotron_document_types": ["Debt Allocation Report"] },
+            { "id": "equity_allocation_report", "label": "Equity allocation report", "description": "Report on allocation or composition of equity.", "nemotron_document_types": ["Equity Allocation Report"] }
+          ]
+        },
+        {
+          "id": "banking_and_lending",
+          "label": "Banking and lending",
+          "subcategories": [
+            { "id": "bank_statement", "label": "Bank statement", "description": "Periodic statement of account activity.", "nemotron_document_types": ["Bank Statement"] },
+            { "id": "loan_application", "label": "Loan application", "description": "Application for credit, including supporting detail.", "nemotron_document_types": ["Loan Application"] },
+            { "id": "credit_report", "label": "Credit report", "description": "Report on an individual's or entity's credit history.", "nemotron_document_types": ["Credit Report"] },
+            { "id": "tax_return", "label": "Tax return", "description": "Filed return of income and tax due.", "nemotron_document_types": ["Tax Return"] }
+          ]
+        },
+        {
+          "id": "investment_and_markets",
+          "label": "Investment and markets",
+          "subcategories": [
+            { "id": "portfolio_report", "label": "Portfolio report", "description": "Report on the holdings and performance of a portfolio.", "nemotron_document_types": ["Portfolio Report"] },
+            { "id": "fund_performance_report", "label": "Fund performance report", "description": "Report on a fund's returns and positioning.", "nemotron_document_types": ["Fund Performance Report"] },
+            { "id": "investment_performance_report", "label": "Investment performance report", "description": "Report on the performance of an investment or mandate.", "nemotron_document_types": ["Investment Performance Report"] },
+            { "id": "investment_proposal", "label": "Investment proposal", "description": "Proposal recommending an investment.", "nemotron_document_types": ["Investment Proposal"] },
+            { "id": "market_analysis", "label": "Market analysis", "description": "Analysis of market conditions or a sector.", "nemotron_document_types": ["Market Analysis"] },
+            { "id": "valuation_report", "label": "Valuation report", "description": "Report deriving the value of an asset or entity.", "nemotron_document_types": ["Valuation Report"] }
+          ]
+        },
+        {
+          "id": "securities_and_offerings",
+          "label": "Securities and offerings",
+          "subcategories": [
+            { "id": "prospectus", "label": "Prospectus", "description": "Disclosure document for a securities offering.", "nemotron_document_types": ["Prospectus"] },
+            { "id": "security_offering_memorandum", "label": "Offering memorandum", "description": "Private placement or offering memorandum.", "nemotron_document_types": ["Security Offering Memorandum"] },
+            { "id": "equity_offering", "label": "Equity offering", "description": "Documentation of an equity issuance.", "nemotron_document_types": ["Equity Offering"] },
+            { "id": "debt_offering", "label": "Debt offering", "description": "Documentation of a debt issuance.", "nemotron_document_types": ["Debt Offering"] },
+            { "id": "stock_certificate", "label": "Stock certificate", "description": "Certificate evidencing ownership of shares.", "nemotron_document_types": ["Stock Certificate"] },
+            { "id": "bond_certificate", "label": "Bond certificate", "description": "Certificate evidencing a bond holding.", "nemotron_document_types": ["Bond Certificate"] },
+            { "id": "dividend_payment_notice", "label": "Dividend payment notice", "description": "Notice of a dividend paid or declared.", "nemotron_document_types": ["Dividend Payment"] },
+            { "id": "interest_payment_notice", "label": "Interest payment notice", "description": "Notice of an interest payment.", "nemotron_document_types": ["Interest Payment"] }
+          ]
+        },
+        {
+          "id": "derivatives_and_trading",
+          "label": "Derivatives and trading agreements",
+          "subcategories": [
+            { "id": "derivative_contract", "label": "Derivative contract", "description": "Derivative contract not covered by a more specific type.", "nemotron_document_types": ["Derivative Contract"] },
+            { "id": "futures_contract", "label": "Futures contract", "description": "Exchange-traded futures contract.", "nemotron_document_types": ["Futures Contract"] },
+            { "id": "forward_contract", "label": "Forward contract", "description": "Bilateral forward contract.", "nemotron_document_types": ["Forward Contract"] },
+            { "id": "option_contract", "label": "Option contract", "description": "Option contract.", "nemotron_document_types": ["Option Contract"] },
+            { "id": "swap_agreement", "label": "Swap agreement", "description": "Swap agreement.", "nemotron_document_types": ["Swap Agreement"] },
+            { "id": "repurchase_agreement", "label": "Repurchase agreement", "description": "Repo or reverse repo agreement.", "nemotron_document_types": ["Repurchase Agreement"] }
+          ]
+        },
+        {
+          "id": "corporate_agreements",
+          "label": "Corporate agreements and governance",
+          "subcategories": [
+            { "id": "underwriting_agreement", "label": "Underwriting agreement", "description": "Agreement with underwriters for an issuance or risk.", "nemotron_document_types": ["Underwriting Agreement"] },
+            { "id": "subscription_agreement", "label": "Subscription agreement", "description": "Agreement to subscribe for securities or a fund interest.", "nemotron_document_types": ["Subscription Agreement"] },
+            { "id": "shareholder_agreement", "label": "Shareholder agreement", "description": "Agreement among shareholders.", "nemotron_document_types": ["Shareholder Agreement"] },
+            { "id": "purchase_agreement", "label": "Purchase agreement", "description": "Agreement for the purchase of assets or securities.", "nemotron_document_types": ["Purchase Agreement"] },
+            { "id": "acquisition_agreement", "label": "Acquisition agreement", "description": "Agreement governing an acquisition.", "nemotron_document_types": ["Acquisition Agreement"] },
+            { "id": "merger_agreement", "label": "Merger agreement", "description": "Agreement governing a merger.", "nemotron_document_types": ["Merger Agreement"] },
+            { "id": "lease_agreement", "label": "Lease agreement", "description": "Lease of property or equipment.", "nemotron_document_types": ["Lease Agreement"] },
+            { "id": "corporate_bylaws", "label": "Corporate bylaws", "description": "Bylaws or constitutional documents of a company.", "nemotron_document_types": ["Corporate Bylaws"] }
+          ]
+        },
+        {
+          "id": "risk_and_compliance",
+          "label": "Risk, compliance and insurance",
+          "subcategories": [
+            { "id": "risk_assessment", "label": "Risk assessment", "description": "Assessment of financial or operational risk.", "nemotron_document_types": ["Risk Assessment"] },
+            { "id": "compliance_report", "label": "Compliance report", "description": "Report on compliance with rules or obligations.", "nemotron_document_types": ["Compliance Report"] },
+            { "id": "solvency_report", "label": "Solvency report", "description": "Report on capital adequacy or solvency.", "nemotron_document_types": ["Solvency Report"] },
+            { "id": "insurance_policy", "label": "Insurance policy", "description": "Policy wording or schedule for insurance cover.", "nemotron_document_types": ["Insurance Policy"] },
+            { "id": "privacy_or_cookie_policy", "label": "Privacy or cookie policy", "description": "Published policy on personal data or cookie use.", "nemotron_document_types": ["cookie policy document"] },
+            { "id": "credential_notice", "label": "Credential notice", "description": "Notice delivering or changing a credential (password, PIN, access code).", "nemotron_document_types": ["Wi-Fi access guide with password"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "government",
+      "label": "Government",
+      "description": "Public administration: civil registration, immigration, benefits, taxation, procurement, permitting, and internal policy.",
+      "nemotron_domains": ["Government", "Civil Rights", "Identity Management", "Identity Verification Services"],
+      "categories": [
+        {
+          "id": "vital_records_and_identity",
+          "label": "Vital records and identity documents",
+          "subcategories": [
+            { "id": "birth_certificate", "label": "Birth certificate", "description": "Civil registration of a birth.", "nemotron_document_types": ["Birth Certificate"] },
+            { "id": "marriage_license", "label": "Marriage licence", "description": "Licence or certificate of marriage.", "nemotron_document_types": ["Marriage License"] },
+            { "id": "divorce_decree", "label": "Divorce decree", "description": "Court decree dissolving a marriage.", "nemotron_document_types": ["Divorce Decree"] },
+            { "id": "social_security_card", "label": "Social security card", "description": "Card or notice bearing a social security number.", "nemotron_document_types": ["Social Security Card"] },
+            { "id": "driver_license", "label": "Driver licence", "description": "Licence to drive, or its application.", "nemotron_document_types": ["Driver License"] },
+            { "id": "passport", "label": "Passport", "description": "Passport or passport application.", "nemotron_document_types": ["Passport"] },
+            { "id": "voter_registration", "label": "Voter registration", "description": "Registration of an elector.", "nemotron_document_types": ["Voter Registration"] },
+            { "id": "biometric_identity_record", "label": "Biometric identity record", "description": "Biometric capture or match record used for identity verification, including at borders.", "nemotron_document_types": ["passport biometric matching report", "border entry biometric scan receipt", "visa biometric data record"] }
+          ]
+        },
+        {
+          "id": "immigration",
+          "label": "Immigration and travel",
+          "subcategories": [
+            { "id": "visa_application", "label": "Visa application", "description": "Application for a visa.", "nemotron_document_types": ["Visa Application"] },
+            { "id": "immigration_form", "label": "Immigration form", "description": "Immigration form not covered by a more specific type.", "nemotron_document_types": ["Immigration Form"] },
+            { "id": "green_card_application", "label": "Permanent residence application", "description": "Application for permanent residence.", "nemotron_document_types": ["Green Card Application"] },
+            { "id": "asylum_petition", "label": "Asylum petition", "description": "Petition for asylum or protection.", "nemotron_document_types": ["Petition for Asylum"] },
+            { "id": "international_health_certificate", "label": "International health certificate", "description": "Health certificate required for international travel.", "nemotron_document_types": ["international health certificate"] }
+          ]
+        },
+        {
+          "id": "benefits_and_claims",
+          "label": "Benefits, entitlements and claims",
+          "subcategories": [
+            { "id": "unemployment_claim", "label": "Unemployment claim", "description": "Claim for unemployment benefit.", "nemotron_document_types": ["Unemployment Claim"] },
+            { "id": "disability_insurance_claim", "label": "Disability insurance claim", "description": "Claim for disability benefit or insurance.", "nemotron_document_types": ["Disability Insurance Claim"] },
+            { "id": "workers_compensation_claim", "label": "Workers' compensation claim", "description": "Claim for work-related injury compensation.", "nemotron_document_types": ["Worker's Compensation Claim"] },
+            { "id": "health_insurance_claim_form", "label": "Health insurance claim form", "description": "Claim against health coverage administered by the public sector.", "nemotron_document_types": ["Health Insurance Claim Form"] },
+            { "id": "health_insurance_enrollment", "label": "Health insurance enrolment", "description": "Enrolment in a health plan.", "nemotron_document_types": ["Health Insurance Enrollment", "Health Insurance Enrollment Form"] },
+            { "id": "employee_benefits_enrollment", "label": "Employee benefits enrolment", "description": "Enrolment in employee benefit schemes.", "nemotron_document_types": ["Employee Benefits Enrollment"] },
+            { "id": "retirement_plan_enrollment", "label": "Retirement plan enrolment", "description": "Enrolment in a retirement or pension plan.", "nemotron_document_types": ["Retirement Plan Enrollment"] },
+            { "id": "retirement_contribution_form", "label": "Retirement contribution form", "description": "Election or change of retirement contributions.", "nemotron_document_types": ["401K Contribution Form"] },
+            { "id": "medical_expense_reimbursement", "label": "Medical expense reimbursement", "description": "Claim for reimbursement of medical costs.", "nemotron_document_types": ["Medical Expense Reimbursement"] },
+            { "id": "health_risk_assessment_form", "label": "Health risk assessment form", "description": "Health risk questionnaire used in benefits administration.", "nemotron_document_types": ["health risk assessment form"] }
+          ]
+        },
+        {
+          "id": "taxation_and_public_finance",
+          "label": "Taxation and public finance",
+          "subcategories": [
+            { "id": "tax_return", "label": "Tax return", "description": "Return of income or other tax filing.", "nemotron_document_types": ["Tax Return", "Tax Return Form"] },
+            { "id": "property_tax_payment", "label": "Property tax payment", "description": "Assessment or payment record for property tax.", "nemotron_document_types": ["Property Tax Payment"] },
+            { "id": "budget_proposal", "label": "Budget proposal", "description": "Proposed public budget.", "nemotron_document_types": ["Budget Proposal"] },
+            { "id": "financial_report", "label": "Financial report", "description": "Report on public finances.", "nemotron_document_types": ["Financial Report"] },
+            { "id": "audit_report", "label": "Audit report", "description": "Findings of an audit.", "nemotron_document_types": ["Audit Report"] },
+            { "id": "grant_application", "label": "Grant application", "description": "Application for public funding.", "nemotron_document_types": ["Grant Application"] }
+          ]
+        },
+        {
+          "id": "procurement_and_contracting",
+          "label": "Procurement and contracting",
+          "subcategories": [
+            { "id": "procurement_record", "label": "Procurement record", "description": "Record of a procurement action.", "nemotron_document_types": ["Procurement Record"] },
+            { "id": "procurement_plan", "label": "Procurement plan", "description": "Forward plan of procurement activity.", "nemotron_document_types": ["Procurement Plan"] },
+            { "id": "government_contract_proposal", "label": "Contract proposal", "description": "Bid or proposal for a public contract.", "nemotron_document_types": ["Government Contract Proposal"] },
+            { "id": "statement_of_work", "label": "Statement of work", "description": "Scope and deliverables for contracted work.", "nemotron_document_types": ["Statement of Work"] },
+            { "id": "contract_modification", "label": "Contract modification", "description": "Amendment to an existing contract.", "nemotron_document_types": ["Contract Modification"] },
+            { "id": "contract_compliance_report", "label": "Contract compliance report", "description": "Report on a contractor's compliance.", "nemotron_document_types": ["Contract Compliance Report"] },
+            { "id": "supplier_evaluation_form", "label": "Supplier evaluation form", "description": "Evaluation or qualification of a supplier.", "nemotron_document_types": ["Supplier Evaluation Form"] },
+            { "id": "nondisclosure_agreement", "label": "Non-disclosure agreement", "description": "Confidentiality or non-disclosure undertaking.", "nemotron_document_types": ["Non-Disclosure Agreement", "Confidentiality Agreement"] }
+          ]
+        },
+        {
+          "id": "human_resources",
+          "label": "Public sector human resources",
+          "subcategories": [
+            { "id": "job_application", "label": "Job application", "description": "Application for employment.", "nemotron_document_types": ["Job Application", "Job Application Form"] },
+            { "id": "employment_contract", "label": "Employment contract", "description": "Contract of employment.", "nemotron_document_types": ["Employment Contract"] },
+            { "id": "employment_verification", "label": "Employment verification", "description": "Confirmation of a person's employment.", "nemotron_document_types": ["Employment Verification"] },
+            { "id": "termination_notice", "label": "Termination notice", "description": "Notice ending an engagement or contract.", "nemotron_document_types": ["Termination Notice"] },
+            { "id": "time_off_request", "label": "Time off request", "description": "Request for leave.", "nemotron_document_types": ["Time Off Request"] }
+          ]
+        },
+        {
+          "id": "permits_and_land_use",
+          "label": "Permits, land use and environment",
+          "subcategories": [
+            { "id": "building_permit_application", "label": "Building permit application", "description": "Application to build or alter a structure.", "nemotron_document_types": ["Building Permit Application"] },
+            { "id": "land_use_permit", "label": "Land use permit", "description": "Permit governing the use of land.", "nemotron_document_types": ["Land Use Permit"] },
+            { "id": "zoning_compliance_certificate", "label": "Zoning compliance certificate", "description": "Certificate that a use complies with zoning.", "nemotron_document_types": ["Zoning Compliance Certificate"] },
+            { "id": "environmental_impact_assessment", "label": "Environmental impact assessment", "description": "Assessment of environmental effects of a proposal.", "nemotron_document_types": ["Environmental Impact Assessment"] }
+          ]
+        },
+        {
+          "id": "policy_and_governance",
+          "label": "Policy, governance and public participation",
+          "subcategories": [
+            { "id": "policy_manual", "label": "Policy manual", "description": "Manual setting out organisational policy.", "nemotron_document_types": ["Policy Manual"] },
+            { "id": "procedure_guide", "label": "Procedure guide", "description": "Step-by-step operating procedure.", "nemotron_document_types": ["Procedure Guide"] },
+            { "id": "ethics_policy", "label": "Ethics policy", "description": "Policy on ethical conduct.", "nemotron_document_types": ["Ethics Policy"] },
+            { "id": "code_of_conduct", "label": "Code of conduct", "description": "Expected standards of behaviour.", "nemotron_document_types": ["Code of Conduct"] },
+            { "id": "security_policy", "label": "Security policy", "description": "Policy governing information or physical security.", "nemotron_document_types": ["Security Policy"] },
+            { "id": "meeting_minutes", "label": "Meeting minutes", "description": "Minutes of a meeting.", "nemotron_document_types": ["Meeting Minutes"] },
+            { "id": "petition", "label": "Petition", "description": "Petition submitted to a public body.", "nemotron_document_types": ["Petition"] },
+            { "id": "freedom_of_information_request", "label": "Freedom of information request", "description": "Request for records under access-to-information law.", "nemotron_document_types": ["Freedom of Information Act Request"] },
+            { "id": "training_materials", "label": "Training materials", "description": "Material used to train staff.", "nemotron_document_types": ["Training Materials"] },
+            { "id": "correspondence", "label": "Correspondence", "description": "Letter, email, or memo exchanged in the course of business.", "nemotron_document_types": ["email"] }
+          ]
+        },
+        {
+          "id": "continuity_and_programme",
+          "label": "Continuity, risk and programme management",
+          "subcategories": [
+            { "id": "emergency_response_plan", "label": "Emergency response plan", "description": "Plan for responding to an emergency.", "nemotron_document_types": ["Emergency Response Plan"] },
+            { "id": "disaster_recovery_plan", "label": "Disaster recovery plan", "description": "Plan for recovering services after a disaster.", "nemotron_document_types": ["Disaster Recovery Plan"] },
+            { "id": "business_continuity_plan", "label": "Business continuity plan", "description": "Plan for maintaining operations through disruption.", "nemotron_document_types": ["Business Continuity Plan"] },
+            { "id": "risk_management_plan", "label": "Risk management plan", "description": "Plan for identifying and managing risk.", "nemotron_document_types": ["Risk Management Plan"] },
+            { "id": "quality_assurance_report", "label": "Quality assurance report", "description": "Report on quality assurance activity.", "nemotron_document_types": ["Quality Assurance Report"] },
+            { "id": "project_plan", "label": "Project plan", "description": "Plan for delivering a project.", "nemotron_document_types": ["Project Plan"] },
+            { "id": "project_charter", "label": "Project charter", "description": "Document authorising a project and its scope.", "nemotron_document_types": ["Project Charter"] }
+          ]
+        },
+        {
+          "id": "access_and_records_management",
+          "label": "Access management and system records",
+          "subcategories": [
+            { "id": "credential_notice", "label": "Credential notice", "description": "Notice delivering or changing a credential (password, PIN, access code).", "nemotron_document_types": ["PIN change confirmation notice", "training system login handout", "QA account credentials table"] },
+            { "id": "cookie_configuration_record", "label": "Cookie configuration record", "description": "Technical record of cookie scope, expiry, or single sign-on configuration.", "nemotron_document_types": ["cookie audit log", "cookie scope and expiry table", "single sign-on (SSO) cookie config"] }
+          ]
+        }
+      ]
+    }
+  ]
+}
